@@ -272,7 +272,6 @@ def main():
     H, W, C = data1.shape
     print("Data shape:", data1.shape, data2.shape, gt.shape)
 
-    # 标准化（分别对两期逐光谱标准化）
     d1_rs = data1.reshape(-1, C)
     d2_rs = data2.reshape(-1, C)
     sc1 = preprocessing.StandardScaler().fit(d1_rs)
@@ -280,13 +279,11 @@ def main():
     data1_std = sc1.transform(d1_rs).reshape(H, W, C)
     data2_std = sc2.transform(d2_rs).reshape(H, W, C)
 
-    # 统计类别
     class_count = 2
     gt_vec = gt.reshape(-1)
     for i in range(1, class_count+1):
         print(f"class {i} count = {(gt_vec == i).sum()}")
 
-    # ====== 划分索引（按比例；背景不参与采样） ======
     samples_type = 'ratio'
     train_ratio = 0.01
     val_ratio   = 0.01
@@ -321,7 +318,6 @@ def main():
     val_loader   = DataLoader(val_set,   batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False)
     test_loader  = DataLoader(test_set,  batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False)
 
-    # ====== 打印数据形状 ======
     print("Train size:", len(train_set), "Val size:", len(val_set), "Test size:", len(test_set))
     if len(train_set) > 0:
         ex_x1, ex_x2, ex_y = next(iter(train_loader))
