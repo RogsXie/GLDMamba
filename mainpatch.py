@@ -5,7 +5,6 @@ import os
 import time
 import random
 import warnings
-warnings.filterwarnings("ignore")
 import numpy as np
 import scipy.io as sio
 from sklearn import preprocessing, metrics
@@ -14,22 +13,18 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import matplotlib
 matplotlib.use('Agg')
+warnings.filterwarnings("ignore")
 import matplotlib.pyplot as plt
-
+import modelpa 
 
 def measure_forward_backward_flops(model, C, ws, device):
-    """测量一次 forward FLOPs、backward FLOPs、参数量"""
     model.eval()
-
-    # 构造 dummy 输入
     x1 = torch.randn(1, C, ws, ws).to(device)
     x2 = torch.randn(1, C, ws, ws).to(device)
     y = torch.randint(0, 2, (1,)).to(device)
 
-    # ---- 测 Forward FLOPs ----
     flops_fwd, params = profile(model, inputs=(x1, x2))
 
-    # ---- 测 Backward FLOPs ----
     criterion = nn.CrossEntropyLoss()
     with profiler.profile(use_cuda=True) as prof:
         logits = model(x1, x2)
@@ -41,7 +36,7 @@ def measure_forward_backward_flops(model, C, ws, device):
     return flops_fwd, total_backward_ops, params
 
 
-import modelpa  # 你的模型定义
+ 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
@@ -70,7 +65,6 @@ os.makedirs(save_dir_results, exist_ok=True)
 os.makedirs(save_dir_models, exist_ok=True)
 
 def pad_with_reflection(arr: np.ndarray, pad: int) -> np.ndarray:
-    """ 边界反射填充，便于随处裁 patch；arr: (H, W, C) """
     if pad <= 0:
         return arr
     return np.pad(arr, ((pad, pad), (pad, pad), (0, 0)), mode='reflect')
@@ -81,7 +75,6 @@ def linear_to_hw(idx: int, W: int):
     return int(r), int(c)
 
 def draw_classification_map(label_2d: np.ndarray, save_path: str, scale: float = 4.0, dpi: int = 400):
-    """ 保存灰度/索引图（用于简洁可视化） """
     fig, ax = plt.subplots()
     ax.imshow(label_2d.astype(np.int16), cmap='gray')
     ax.set_axis_off()
@@ -91,10 +84,6 @@ def draw_classification_map(label_2d: np.ndarray, save_path: str, scale: float =
     plt.close(fig)
 
 def compute_metrics_arrays(y_true, y_pred, class_count: int):
-    """
-    y_true, y_pred: 1D numpy arrays, 取自非背景像素（>0）的标签（真实1..K；预测1..K）
-    返回：OA、AA、每类精确率/召回/F1（长度K）、MacroP/R/F1、Kappa
-    """
     eps = 1e-12
     # OA
     OA = (y_true == y_pred).mean() if y_true.size > 0 else 0.0
@@ -156,11 +145,9 @@ class ChangePatchDataset(Dataset):
 
         self.d1p = pad_with_reflection(data1, self.pad)
         self.d2p = pad_with_reflection(data2, self.pad)
-        # gt 保留 0..K（背景=0），取中心像素
         self.gtp = np.pad(gt, ((self.pad, self.pad), (self.pad, self.pad)),
                           mode='constant', constant_values=0)
 
-        # 过滤仅保留前景索引
         fg = [int(i) for i in index_list if gt[linear_to_hw(int(i), self.W)] != 0]
         self.idxs = np.array(fg, dtype=np.int64)
 
@@ -217,11 +204,6 @@ def evaluate_val(model, loader, device, criterion, ws):
     val_oa   = correct / max(1, total)
     return val_loss, val_oa
 
-
-# ---------------------------
-# 滑窗整图推理（预测整幅图每个像素的类别 1..K；背景保持 0）
-# ---------------------------
-@torch.no_grad()
 def infer_full_map(model, data1, data2, gt, ws=9, infer_batch=2048, device=torch.device('cpu')):
     H, W, C = data1.shape
     pad = ws // 2
@@ -229,7 +211,6 @@ def infer_full_map(model, data1, data2, gt, ws=9, infer_batch=2048, device=torch
     d1p = pad_with_reflection(data1, pad)
     d2p = pad_with_reflection(data2, pad)
 
-    # 生成所有中心像素的行列
     coords = [(r, c) for r in range(H) for c in range(W)]
     preds = np.zeros(H * W, dtype=np.int16)
 
@@ -267,14 +248,10 @@ def infer_full_map(model, data1, data2, gt, ws=9, infer_batch=2048, device=torch
 
     pred_map = preds.reshape(H, W)
 
-    # 可选：用 gt 的背景覆盖（背景保持 0）
     pred_map = np.where(gt == 0, 0, pred_map)
     return pred_map
 
 
-# ---------------------------
-# 主流程
-# ---------------------------
 def main():
     # ====== 数据读取与预处理 ======
     data_path = os.path.join(r'C:\Users\12879\PycharmProjects\vmamba\venv\hehai\change')
@@ -291,8 +268,6 @@ def main():
     # data1 = sio.loadmat(os.path.join(data_path, 'River','river_after.mat'))['river_after']
     # data2 = sio.loadmat(os.path.join(data_path, 'River','river_before.mat'))['river_before']
     # gt = sio.loadmat(os.path.join(data_path, 'River','groundtruth'))['lakelabel_v1']
-
-
 
     H, W, C = data1.shape
     print("Data shape:", data1.shape, data2.shape, gt.shape)
@@ -338,7 +313,6 @@ def main():
         val_index  = np.array([], dtype=np.int64)
         test_index = rest_index
 
-    # ====== 构建 Patch 数据集与 DataLoader ======
     train_set = ChangePatchDataset(data1_std, data2_std, gt, train_index, ws=windowSize)
     val_set   = ChangePatchDataset(data1_std, data2_std, gt, val_index,   ws=windowSize)
     test_set  = ChangePatchDataset(data1_std, data2_std, gt, test_index,  ws=windowSize)
@@ -356,8 +330,6 @@ def main():
               "Batch x2 shape:", tuple(ex_x2.shape),
               "Batch y shape:", tuple(ex_y.shape))
 
-    # ====== 构建模型（自动适配前向方式） ======
-    # 优先尝试 (bands=C, class_count=K, patch_size=ws) 的初始化，其次尝试 (H,W,C,K) 以兼容你的老构造
     net = modelpa.Net( C, class_count,H).to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -365,7 +337,6 @@ def main():
 
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.9)
 
-    # ====== 训练 ======
     best_val_oa = -1.0
     best_val_loss = float('inf')
     best_state_by_oa = None
@@ -391,13 +362,11 @@ def main():
 
         train_loss = running_loss / max(1, len(train_set))
 
-        # ---- 验证：Loss + OA ----
         if epoch %10==0:
             val_loss, val_oa = evaluate_val(net, val_loader, device, criterion, ws=windowSize) if len(val_set) > 0 else (
             0.0, 0.0)
             print(f"Epoch [{epoch:03d}/{epochs}]  TrainLoss={train_loss:.6f}  ValLoss={val_loss:.6f}  ValOA={val_oa:.4f}")
 
-            # ---- 根据 ValLoss 保存最优 ----
             if val_loss < best_val_loss:
                 print('save')
                 best_val_loss = val_loss
@@ -411,16 +380,13 @@ def main():
     print(
         f"Training finished. Best Val OA = {best_val_oa:.4f}, Best Val Loss = {best_val_loss:.6f}. Time: {train_time:.2f}s")
 
-    # 训练完成后，按你需要的标准载回权重
     if best_state_by_loss is not None:
         net.load_state_dict({k: v.to(device) for k, v in best_state_by_loss.items()})
     torch.save(net.state_dict(), os.path.join(save_dir_models, "best_patch_model.pt"))  # 也保存一份当前内存中的
 
-    # ====== 测试集 OA ======
     test_loss, test_oa = evaluate_val(net, test_loader, device, criterion, ws=windowSize)
     print(f"[Mini-batch Test]  Loss={test_loss:.6f}  OA={test_oa:.4f}")
 
-    # ====== 整图滑窗推理 ======
     t1 = time.time()
     pred_map = infer_full_map(net, data1_std, data2_std, gt, ws=windowSize, infer_batch=2048, device=device)
     infer_time = time.time() - t1
@@ -437,7 +403,6 @@ def main():
 
     metrics_dict = compute_metrics_arrays(y_true, y_pred, class_count=class_count)
 
-    # 打印与保存结果
     print("\n========== Full-image Metrics (foreground only) ==========")
     print(f"OA = {metrics_dict['OA']:.6f}")
     print(f"AA = {metrics_dict['AA']:.6f}")
@@ -451,7 +416,6 @@ def main():
     ))
     print("=========================================================\n")
 
-    # 写入 results 文本
     with open(os.path.join(save_dir_results, f"{dataset_name}_results.txt"), "a+", encoding="utf-8") as f:
         f.write('\n====================== PATCH TRAINING ======================\n')
         f.write(f"windowSize={windowSize}, epochs={epochs}, lr={lr}, gamma={gamma}, batch_size={batch_size}\n")
