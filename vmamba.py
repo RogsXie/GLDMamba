@@ -298,42 +298,13 @@ class SS2Dv2:
             self.dt_projs_weight = nn.Parameter(0.1 * torch.rand((self.k_group, self.d_inner, self.dt_rank)))
             self.dt_projs_bias   = nn.Parameter(0.1 * torch.rand((self.k_group, self.d_inner)))
 
-        # ==================================================================
-        #  新增参数：可学习漂移感知网络（Learnable Drift-Aware SSM）
-        #
-        #  核心升级：将 v 的估计从手工统计量（均值/std）改为可学习网络。
-        #
-        #  原版 v 的问题：
-        #    v = sigmoid(|x - mean(x)| / std(x))
-        #    这是一个固定的统计公式，梯度被 no_grad 截断，
-        #    drift_dt_scale 和 drift_A_bias 只能通过下游损失间接学习，
-        #    且统计量无法区分"真正的变化"与"正常的特征多样性"。
-        #
-        #  新方案：用 drift_score_net 直接从特征预测逐位置漂移概率，
-        #    梯度完全流通，模型可以端到端学习"什么样的特征模式对应变化"。
-        #
-        #  (1) drift_score_net：[B, D, L] -> [B, K, L]
-        #      输入：cross_scan 展开前的原始特征 x [B, D, H, W]
-        #      结构：DW3x3 → PW → ReLU → PW → Sigmoid
-        #      输出：K 个方向各自的逐像素漂移概率图，∈ (0,1)
-        #      初始化偏置为负值 → 初始输出接近 0 → 训练初期退化为原始 SSM
-        #
-        #  (2) drift_dt_scale [K, D]：各方向各通道的步长敏感度
-        #      Δ̃_{k,i} = Δ_{k,i} · (1 + drift_dt_scale[k] · v_{k,i})
-        #
-        #  (3) drift_A_bias [K, D, N]：各方向各通道的衰减补偿
-        #      Ã_log[k,d] = A_log[k,d] - |drift_A_bias[k,d]| · v_mean[k,d]
-        # ==================================================================
-        inter = max(self.d_inner // 4, 16)   # 瓶颈维度
+        inter = max(self.d_inner // 4, 16)  
         self.drift_score_net = nn.Sequential(
-            # PW 降维：逐通道点级映射，无局部感受野
             nn.Conv2d(self.d_inner, inter, kernel_size=1, bias=False),
             nn.ReLU(inplace=True),
-            # PW 升维到 K 个方向的漂移概率图
             nn.Conv2d(inter, self.k_group, kernel_size=1, bias=True),
             nn.Sigmoid(),
         )
-        # 初始化最后一层偏置为负值，使初始输出 ≈ sigmoid(-2) ≈ 0.12 ≈ 0
         nn.init.constant_(self.drift_score_net[-2].bias, -2.0)
 
         self.drift_dt_scale = nn.Parameter(
@@ -346,9 +317,6 @@ class SS2Dv2:
         )
         self.drift_A_bias._no_weight_decay = True
 
-    # ------------------------------------------------------------------
-    #  forward_corev2  ——  唯一实质改动处
-    # ------------------------------------------------------------------
     def forward_corev2(
             self,
             x: torch.Tensor = None,
@@ -360,27 +328,7 @@ class SS2Dv2:
             scan_force_torch=False,
             **kwargs,
     ):
-        """
-        与原版接口完全一致（签名不变）。
-
-        内部新增两步（均在 selective_scan 调用之前）：
-
-        Step A — 估计局部漂移强度 v [B, K*D, L]
-            利用特征图 x 自身：每个位置与空间均值的归一化绝对偏差，
-            作为"该位置发生时相漂移的程度"的代理指标。
-            公式：v_i = |x_i - mean_spatial(x)| / (std_spatial(x) + ε)
-                   v_i = sigmoid(v_i)   ∈ (0, 1)
-            无需外部输入，接口零改动。
-
-        Step B1 — 漂移感知 Δt 调制
-            Δ̃ = Δ · (1 + drift_dt_scale · v)
-            变化区域步长更大 → SSM 对光谱跳变响应更快。
-
-        Step B2 — 漂移感知 A 补偿
-            Ã_log = A_log - |drift_A_bias| · mean(v, dim=L)
-            变化区域 |A| 减小 → 状态衰减更慢 → 历史上下文保留更久，
-            有助于区分真实变化与短暂扰动。
-        """
+        
         _scan_mode = dict(cross2d=0, unidi=1, bidi=2, cascade2d=-1).get(scan_mode, 0)
         delta_softplus = True
         out_norm     = self.out_norm
@@ -398,7 +346,6 @@ class SS2Dv2:
                                      delta_softplus, ssoflex,
                                      backend=selective_scan_backend)
 
-        # ---------- 标准扫描 & x_proj（与原版完全一致）----------
         x_proj_bias = getattr(self, "x_proj_bias", None)
         xs = cross_scan_fn(x, in_channel_first=True, out_channel_first=True,
                            scans=_scan_mode, force_torch=scan_force_torch)
@@ -431,50 +378,18 @@ class SS2Dv2:
         Cs          = Cs.contiguous().view(B, K, N, L)
         delta_bias  = self.dt_projs_bias.view(-1).to(torch.float32)  # [K*D]
 
-        # ==================================================================
-        #  Step A：可学习漂移概率图 v  [B, K, D, L]
-        #
-        #  用 drift_score_net 直接从输入特征图 x [B, D, H, W] 预测：
-        #    score [B, K, H, W] = DW3x3 → PW → ReLU → PW → Sigmoid
-        #
-        #  相比手工统计量的三点优势：
-        #    1. 梯度完全流通，end-to-end 学习"什么特征模式对应变化"
-        #    2. DW3x3 捕获局部空间结构，而非单纯的全局统计
-        #    3. K 个输出通道对应 K 个扫描方向，各自独立预测
-        #
-        #  score: [B, K, H, W] → reshape [B, K, 1, L] → 广播到 [B, K, D, L]
-        #  注：v 在 D 维度上广播（同一位置所有通道共享漂移概率），
-        #      具体的通道差异由 drift_dt_scale [K, D] 控制。
-        # ==================================================================
-        score = self.drift_score_net(x)                         # [B, K, H, W]
-        # [B,K,H,W] -> [B,K,1,L]，广播到 [B,K,D,L]，contiguous保证梯度正常回传
+        
+        score = self.drift_score_net(x)                        
         v = score.view(B, K, 1, L).expand(B, K, D, L).contiguous()  # [B, K, D, L]
 
-        # ==================================================================
-        #  Step B1：方向独立的 Δt 调制
-        #
-        #  修改：Δ̃_{k,i} = Δ_{k,i} · (1 + drift_dt_scale[k] · v_{k,i})
-        #
-        #  drift_dt_scale [K, D]：第 k 方向、第 d 通道各自学习敏感度，
-        #  不同扫描方向对同一变化区域的响应强度可以不同。
-        #  初始化为 0 → 训练初期退化为原始 SSM。
-        # ==================================================================
+       
         scale = self.drift_dt_scale.to(torch.float32)          # [K, D]
         # scale: [K,D] -> [1,K,D,1]，v: [B,K,D,L] → 逐方向逐通道调制
         dts_kd = dts.view(B, K, D, L)
         dts_kd = dts_kd * (1.0 + scale.unsqueeze(0).unsqueeze(-1) * v)
         dts = dts_kd.view(B, K * D, L)                         # 还原 [B, K*D, L]
 
-        # ==================================================================
-        #  Step B2：方向独立的 A 补偿
-        #
-        #  修改：Ã_log[k,d] = A_log[k,d] - |drift_A_bias[k,d]| · ṽ[k,d]
-        #        ṽ[k,d] = mean_{B,L}(v[k,d])  ∈ (0,1)
-        #
-        #  drift_A_bias [K, D, N]：第 k 方向独立学习衰减补偿，
-        #  水平/垂直扫描路径对变化区域的状态记忆需求不同，各自自适应。
-        #  cuda kernel 要求 A 严格为 [K*D, N]，最后 reshape 回去。
-        # ==================================================================
+       
         # v: [B,K,D,L] → 折叠 B 和 L → [K, D]
         v_mean = v.mean(dim=-1).mean(dim=0)                     # [K, D]
         A_bias = self.drift_A_bias.to(torch.float32).abs()      # [K, D, N]
@@ -482,12 +397,11 @@ class SS2Dv2:
         A_drift = (v_mean.unsqueeze(-1) * A_bias)               # [K, D, N]
         # As [K*D, N] reshape → [K,D,N]，减去各方向补偿后还原
         As = (As.view(K, D, N) - A_drift).view(K * D, N)        # [K*D, N]
-        # ==================================================================
+        
 
         if force_fp32:
             xs, dts, Bs, Cs = to_fp32(xs, dts, Bs, Cs)
 
-        # ---------- selective_scan（形状与原版完全一致）----------
         ys: torch.Tensor = selective_scan(
             xs, dts, As, Bs, Cs, Ds, delta_bias, delta_softplus
         ).view(B, K, -1, H, W)
@@ -503,9 +417,6 @@ class SS2Dv2:
         y = out_norm(y)
         return y.to(x.dtype)
 
-    # ------------------------------------------------------------------
-    #  以下全部与原版一致，零改动
-    # ------------------------------------------------------------------
     def forwardv2(self, x: torch.Tensor, **kwargs):
         x = self.in_proj(x)
         if not self.disable_z:
