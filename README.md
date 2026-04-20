@@ -1,6 +1,5 @@
 # GLDMamba: Global–local differential mamba network for hyperspectral image change detection
-[13.pdf](https://github.com/user-attachments/files/26885208/13.pdf)
-
+<img width="1759" height="1302" alt="533f7080-d704-4dd7-8215-606cbc84884b" src="https://github.com/user-attachments/assets/b7f653e4-3cfa-4c53-a019-432cc693fc8e" />
 
 
 ----------
