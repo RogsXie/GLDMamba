@@ -17,8 +17,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-from VMamba.classification.models.gldvm import VSSBlock
-
+import GLDMambaP
 import SSMIF
 import  AIWSEN
 import GLAFormer
