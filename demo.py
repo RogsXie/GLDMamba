@@ -22,11 +22,6 @@ else:
 print(f"Using device: {device}")
 
 Seed_List = [42]
-# Seed_List = [24,27,28,29,42,43,42,27,27,42]
-# Seed_List = [42,42,42,42,42,42,42,42,42,42]
-# Seed_List = [9,8,7,6,5,4,3,2,1,0]
-# Seed_List = [42,8,7,6,5,4,3,2,1,0]
-# Seed_List=[40,41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
 torch.cuda.empty_cache()
 
 
@@ -107,34 +102,6 @@ def compute_loss(predict: torch.Tensor,
     we = -torch.mul(reallabel_onehot, torch.log(predict + 1e-10))
     we = torch.mul(we, reallabel_mask)
     return torch.sum(we)
-# ─── 改进的损失函数 (Hybrid Loss) ─────────────────────────────────────────────
-# def compute_loss(predict, reallabel_onehot, reallabel_mask,
-#                  alpha=None, gamma=2.0, dice_weight=0.5):
-#     eps = 1e-10
-#     # alpha: 每类的权重，形状 [class_count]，不传则自动从 batch 统计
-#     mask_idx = (reallabel_mask[:, 0] == 1.0)
-#     if mask_idx.sum() == 0:
-#         return torch.tensor(0.0).to(predict.device)
-#
-#     valid_predict = predict[mask_idx]
-#     valid_onehot  = reallabel_onehot[mask_idx]
-#
-#     # ── 自动计算 alpha（inverse frequency）──
-#     class_counts = valid_onehot.sum(dim=0).clamp(min=1)           # [C]
-#     inv_freq     = 1.0 / class_counts
-#     alpha_w      = (inv_freq / inv_freq.sum()).to(predict.device)  # 归一化
-#
-#     # ── Focal Loss（逐类加权）──
-#     pt        = torch.sum(valid_predict * valid_onehot, dim=1)
-#     alpha_t   = torch.sum(alpha_w.unsqueeze(0) * valid_onehot, dim=1)
-#     focal_loss = (-alpha_t * ((1 - pt) ** gamma) * torch.log(pt + eps)).mean()
-#
-#     # ── Dice Loss ──
-#     intersection = torch.sum(valid_predict * valid_onehot, dim=0)
-#     union        = torch.sum(valid_predict + valid_onehot, dim=0)
-#     dice_loss    = 1 - ((2. * intersection + eps) / (union + eps)).mean()
-#
-#     return (1 - dice_weight) * focal_loss + dice_weight * dice_loss
 
 # ─── 评估函数 ─────────────────────────────────────────────────────────────
 def evaluate_performance(network_output, samples_gt, samples_gt_onehot,
