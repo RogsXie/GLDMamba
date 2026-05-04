@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Patch-based Change Detection — Multi-Seed Experiment
-SEED_LIST = [24, 27, 28, 29, 42, 43, 42, 27, 27, 42]
-"""
-
 import os
 import time
 import random
@@ -147,83 +141,6 @@ def draw_cd_error_map(gt, pred_map, save_path, pos_label=2, dpi=400):
     # 5. 保存时强制 pad_inches 为 0
     fig.savefig(save_path, format='png', dpi=dpi, pad_inches=0)
     plt.close(fig)
-
-
-# ===================================================================
-# Patch 数据集
-# ===================================================================
-# class ChangePatchDataset(Dataset):
-#     def __init__(self, data1, data2, gt, index_list, ws=9):
-#         self.H, self.W, self.C = data1.shape
-#         self.ws  = ws
-#         self.pad = ws // 2
-#         self.d1p = pad_with_reflection(data1, self.pad)
-#         self.d2p = pad_with_reflection(data2, self.pad)
-#         self.gtp = np.pad(gt, self.pad, mode='constant', constant_values=0)
-#         fg       = [int(i) for i in index_list
-#                     if gt[linear_to_hw(int(i), self.W)] != 0]
-#         self.idxs = np.array(fg, dtype=np.int64)
-#
-#     def __len__(self):
-#         return len(self.idxs)
-#
-#     def __getitem__(self, i):
-#         idx    = int(self.idxs[i])
-#         r, c   = linear_to_hw(idx, self.W)
-#         rp, cp = r + self.pad, c + self.pad
-#         p1 = self.d1p[rp-self.pad:rp+self.pad+1, cp-self.pad:cp+self.pad+1, :]
-#         p2 = self.d2p[rp-self.pad:rp+self.pad+1, cp-self.pad:cp+self.pad+1, :]
-#         y  = int(self.gtp[rp, cp]) - 1
-#         p1 = np.transpose(p1, (2, 0, 1)).astype(np.float32)
-#         p2 = np.transpose(p2, (2, 0, 1)).astype(np.float32)
-#         return torch.from_numpy(p1), torch.from_numpy(p2), torch.tensor(y, dtype=torch.long)
-#
-#
-# # ===================================================================
-# # 验证
-# # ===================================================================
-# @torch.no_grad()
-# def evaluate_val(model, loader, criterion):
-#     model.eval()
-#     total_loss, correct, total = 0.0, 0, 0
-#     for x1, x2, y in loader:
-#         x1, x2, y  = x1.to(device), x2.to(device), y.to(device)
-#         logits      = model(x1, x2)
-#         total_loss += criterion(logits, y).item() * y.size(0)
-#         correct    += (torch.argmax(logits, 1) == y).sum().item()
-#         total      += y.numel()
-#     return total_loss / max(1, total), correct / max(1, total)
-#
-#
-# # ===================================================================
-# # 滑窗整图推理
-# # ===================================================================
-# @torch.no_grad()
-# def infer_full_map(model, data1, data2, gt, ws=9, infer_batch=2048):
-#     H, W, C = data1.shape
-#     pad = ws // 2
-#     d1p = pad_with_reflection(data1, pad)
-#     d2p = pad_with_reflection(data2, pad)
-#     coords = [(r, c) for r in range(H) for c in range(W)]
-#     preds  = np.zeros(H * W, dtype=np.int16)
-#     model.eval()
-#     i = 0
-#     while i < len(coords):
-#         bc  = coords[i:i+infer_batch]
-#         b   = len(bc)
-#         bx1 = np.zeros((b, C, ws, ws), dtype=np.float32)
-#         bx2 = np.zeros((b, C, ws, ws), dtype=np.float32)
-#         for j, (r, c) in enumerate(bc):
-#             rp, cp = r + pad, c + pad
-#             bx1[j] = np.transpose(d1p[rp-pad:rp+pad+1, cp-pad:cp+pad+1, :], (2,0,1))
-#             bx2[j] = np.transpose(d2p[rp-pad:rp+pad+1, cp-pad:cp+pad+1, :], (2,0,1))
-#         logits = model(torch.from_numpy(bx1).to(device),
-#                        torch.from_numpy(bx2).to(device))
-#         preds[i:i+b] = (torch.argmax(logits, 1).cpu().numpy() + 1).astype(np.int16)
-#         i += b
-#     pred_map = preds.reshape(H, W)
-#     pred_map = np.where(gt == 0, 0, pred_map)
-#     return pred_map
 
 # ===================================================================
 # Patch 数据集
