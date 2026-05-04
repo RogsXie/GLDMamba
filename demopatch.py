@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Patch-based Change Detection — Multi-Seed Experiment
-SEED_LIST = [24, 27, 28, 29, 42, 43, 42, 27, 27, 42]
-"""
-
 import os
 import time
 import random
@@ -25,7 +19,8 @@ import matplotlib.patches as mpatches
 
 import modelpa430
 from VMamba.classification.models.gldvm import VSSBlock
-# from VMamba.classification.models.HSImamba import HSI_mamba
+
+import HSI_mamba
 import  AIWSEN
 import glafomer
 import gtmsiam
@@ -41,13 +36,17 @@ print(f"Using device: {device}")
 # 种子列表 & 超参数
 # ---------------------------
 SEED_LIST   = [0, 1, 2, 3, 4, 5, 6, 7, 8, 42]
-windowSize  = 5
+windowSize  = 3
 epochs      = 100
 lr          = 1e-4
 gamma       = 0.9
-batch_size  = 64
+batch_size  = 128
 train_ratio = 0.01
 val_ratio   = 0.01
+
+# ---------------------------
+# 其他方法参数
+# ---------------------------
 
 # epochs      = 30
 # windowSize = 5
@@ -300,7 +299,9 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True,  num_workers=0)
     val_loader   = DataLoader(val_set,   batch_size=batch_size, shuffle=False, num_workers=0)
 
-    # ---------- 模型 ----------
+    
+    
+    # ---------- 其他模型 ----------
     # net = HSI_mamba().to(device)
     # optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5e-3)
 
@@ -350,7 +351,7 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
 
 
     criterion = nn.CrossEntropyLoss()
-    net = modelpa430.Net(C, class_count, H).to(device)
+    net = modelpaatch.Net(C, class_count, H).to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.9)
 
@@ -508,84 +509,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# if __name__ == "__main__":
-#     # ===================================================================
-#     # 1. 初始化模拟数据与模型 (适配 HSI_mamba)
-#     # ===================================================================
-#     # 模拟 Hermiston 数据集的参数: 154个波段, 5x5 Patch
-#     # 注意：HSI_mamba 内部特征维度 dim 通常设为 128
-#     B, C, H, W = 1, 242, 5, 5
-#     num_classes = 2
-#
-#     print(f"正在初始化模型 (设备: {device})...")
-#     model = HSI_mamba(patch_size=H, in_channel=C, dim=128).to(device)
-#     model.eval()
-#
-#     # 构造模拟双时相输入
-#     x1 = torch.randn(B, C, H, W).to(device)
-#     x2 = torch.randn(B, C, H, W).to(device)
-#
-#     print(f"输入形状: T1={x1.shape}, T2={x2.shape}")
-#
-#     # ===================================================================
-#     # 2. 参数量统计
-#     # ===================================================================
-#     total_params = sum(p.numel() for p in model.parameters())
-#     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-#     print("-" * 30)
-#     print(f"总参数量: {total_params:,}")
-#     print(f"可训练参数量: {trainable_params:,}")
-#
-#     # ===================================================================
-#     # 3. 计算量分析 (THOP)
-#     # ===================================================================
-#     print("-" * 30)
-#     try:
-#         # profile 接收 tuple 形式的输入 (x1, x2)
-#         macs, params = profile(model, inputs=(x1, x2), verbose=False)
-#         print(f"计算量 MACs：{macs / 1e6:.4f} M")
-#         print(f"计算量 FLOPs：{2 * macs / 1e6:.4f} M")  # 1 MAC ≈ 2 FLOPs
-#         print(f"参数量 Params：{params / 1e3:.4f} K")
-#     except Exception as e:
-#         print(f"THOP 分析失败 (可能是由于自定义 Mamba 算子): {e}")
-#
-#     # ===================================================================
-#     # 4. 前向传播输出测试
-#     # ===================================================================
-#     print("-" * 30)
-#     print("开始前向传播测试...")
-#     with torch.no_grad():
-#         # 模型输出经过 Softmax，形状应为 [B, num_classes]
-#         out = model(x1, x2)
-#     print(f"最终输出形状: {out.shape}")
-#     print(f"输出概率样例 (第1个样本): {out[0].cpu().numpy()}")
-#
-#     # ===================================================================
-#     # 5. 性能测试 (速度与 FPS)
-#     # ===================================================================
-#     print("-" * 30)
-#     print("开始性能测试 (100 次迭代)...")
-#
-#     # 预热 GPU
-#     if torch.cuda.is_available():
-#         torch.cuda.synchronize()
-#
-#     iters = 100
-#     start_time = time.time()
-#
-#     with torch.no_grad():
-#         for _ in range(iters):
-#             _ = model(x1, x2)
-#             if torch.cuda.is_available():
-#                 torch.cuda.synchronize()
-#
-#     end_time = time.time()
-#     avg_time = (end_time - start_time) / iters
-#
-#     print(f"平均前向传播时间: {avg_time * 1000:.2f} ms")
-#     print(f"推理速度 FPS: {1.0 / avg_time:.2f}")
-#     print("-" * 30)
-#     print("✅ HSI_mamba 架构与性能测试完成！")
-#
-#     # 如果你想运行原本的多种子实验，请手动调用 main()
-#     # main()
