@@ -11,8 +11,7 @@ from thop import profile
 sys.path.append(r'C:\Users\12879\PycharmProjects\vmamba')
 
 # 然后导入 vmamba 模块
-# from VMamba.classification.models.gldvm import VSSBlock
-from VMamba.classification.models.vm import VSSBlock
+from VMamba.classification.models.gldvm import VSSBlock
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 
@@ -231,125 +230,15 @@ class FFM(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x1, x2):
-        # xa = torch.abs(x1 + x2)
-        # xd = torch.abs(x2 - x1)
         xd = x2 - x1
         xd_feat = self.diff_conv(xd)
-        # diff_w = self.diff_att(xd)
-        # xl = self.local_att(xa)
         xg_avg = self.global_att_avg(xd)
         xg_max = self.global_att_max(xd)
         xlg = xd_feat + xg_avg + xg_max
         w = self.sigmoid(xlg)
         xo = x1 * w + x2 * (1-w)
-
-        # diff_w = self.diff_att(xd)
-        # xo = xo * (1 + diff_w)
-
+        
         return xo
-
-
-class MultiHeadSelfAttention(nn.Module):
-    """
-    2D 空间自注意力：[B, C, H, W] → flatten tokens → MHSA → reshape 回 [B, C, H, W]
-    """
-
-    def __init__(self, dim: int, num_heads: int = 4,
-                 attn_drop: float = 0.0, proj_drop: float = 0.0):
-        super().__init__()
-        assert dim % num_heads == 0
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim, bias=True)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj_drop = nn.Dropout(proj_drop)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, C, H, W = x.shape
-        N = H * W
-        x_flat = x.flatten(2).transpose(1, 2)  # [B, N, C]
-
-        qkv = self.qkv(x_flat)  # [B, N, 3C]
-        qkv = qkv.reshape(B, N, 3, self.num_heads, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)  # [3, B, h, N, d]
-        q, k, v = qkv.unbind(0)  # each [B, h, N, d]
-
-        attn = (q @ k.transpose(-2, -1)) * self.scale  # [B, h, N, N]
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        out = (attn @ v).transpose(1, 2).reshape(B, N, C)  # [B, N, C]
-        out = self.proj_drop(self.proj(out))
-        return out.transpose(1, 2).reshape(B, C, H, W)  # [B, C, H, W]
-
-
-class TransformerFFN(nn.Module):
-    """逐点 FFN（1×1 卷积实现，保留空间维度）"""
-
-    def __init__(self, dim: int, mlp_ratio: float = 4.0, drop: float = 0.0):
-        super().__init__()
-        hidden = int(dim * mlp_ratio)
-        self.net = nn.Sequential(
-            nn.Conv2d(dim, hidden, 1, bias=True),
-            nn.GELU(),
-            nn.Dropout(drop),
-            nn.Conv2d(hidden, dim, 1, bias=True),
-            nn.Dropout(drop),
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-
-class SpatialTransformerBlock(nn.Module):
-    """
-    Pre-LN Transformer Block:
-        LN → MHSA → residual
-        LN → FFN  → residual
-    LN 施加在 channel 维（[B,C,H,W] permute 后做 LayerNorm）
-    """
-
-    def __init__(self, dim: int, num_heads: int = 4, mlp_ratio: float = 4.0,
-                 drop: float = 0.0, attn_drop: float = 0.0):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(dim)
-        self.attn = MultiHeadSelfAttention(dim, num_heads, attn_drop, drop)
-        self.norm2 = nn.LayerNorm(dim)
-        self.ffn = TransformerFFN(dim, mlp_ratio, drop)
-
-    def _ln(self, x: torch.Tensor, norm: nn.LayerNorm) -> torch.Tensor:
-        """[B,C,H,W] → LayerNorm on C → [B,C,H,W]"""
-        B, C, H, W = x.shape
-        return norm(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.attn(self._ln(x, self.norm1))
-        x = x + self.ffn(self._ln(x, self.norm2))
-        return x
-
-
-class SpatialTransformer(nn.Module):
-    """
-    堆叠若干 SpatialTransformerBlock。
-    接口与原 VSSBlock 完全兼容：输入/输出均为 [B, dim, H, W]
-    """
-
-    def __init__(self, dim: int, depth: int = 1, num_heads: int = 4,
-                 mlp_ratio: float = 4.0, drop: float = 0.0,
-                 attn_drop: float = 0.0, drop_path: float = 0.0):
-        super().__init__()
-        self.blocks = nn.ModuleList([
-            SpatialTransformerBlock(dim, num_heads, mlp_ratio, drop, attn_drop)
-            for _ in range(depth)
-        ])
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for blk in self.blocks:
-            x = blk(x)
-        return x
 
 class Net(nn.Module):
     """
@@ -363,28 +252,18 @@ class Net(nn.Module):
         self.channel = channel
         self.patch_size = patch_size
 
-        # Diff 分支: (x2-x1) -> 32 -> 64
-        # self.shared_conv3x3  = SharedConvBlock(self.channel, 32, kernel_size=3)
-        # self.shared2_conv3x3 = SharedConvBlock(32, 64, kernel_size=3)
-        #
-        # # Concat 分支: cat(x1, x2) -> 64
-        # self.concat_3x3 = ConcatModule(self.channel * 2, 64)
         self.shared_conv3x3 = LightReduction(self.channel, 64)
         self.concat_3x3 = LightReduction(self.channel * 2, 64)
-        # 全局/局部模块
-        # self.vssm1  = VSSM(in_chans=64, depths=[1], dims=[64], drop_path=0.1, d_state=32, mlp_ratio=4.0)
-        # self.vssm2  = VSSM(in_chans=64, depths=[1], dims=[64], drop_path=0.1, d_state=32, mlp_ratio=4.0)
+        
         self.vssm_diff1  = VSSBlock(dim=64, drop_path=0.1, d_state=16, mlp_ratio=4.0)
         self.vssm_diff2  = VSSBlock(dim=64, drop_path=0.1, d_state=16, mlp_ratio=4.0)
-        self.trans1 = SpatialTransformer(dim=64, depth=1, num_heads=4, mlp_ratio=4.0, drop=0.1)
-        self.trans2 = SpatialTransformer(dim=64, depth=1, num_heads=4, mlp_ratio=4.0, drop=0.1)
         self.deconv1 = Localprocess(64)
         self.deconv2 = Localprocess(64)
         self.fusion  = FFM(64)
 
         # 分类头：GAP -> LN -> MLP -> logits
-        self.pool = nn.AdaptiveAvgPool2d(1)          # (B, 128, 1, 1)
-        self.head_norm = nn.LayerNorm(128)           # 对通道维做 LN
+        self.pool = nn.AdaptiveAvgPool2d(1)          
+        self.head_norm = nn.LayerNorm(128)          
         self.head_drop = nn.Dropout(p=0.1)
         self.fc1 = nn.Linear(128, 64)
         self.fc2 = nn.Linear(64, 32)
@@ -409,32 +288,27 @@ class Net(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor):
-        # 期望输入: x1, x2 -> [B, C, H, W]
-        # 差分和拼接
+
         xd = abs(x2 - x1)
-        xc = abs(torch.cat([x1, x2], dim=1))   # [B, 2C, H, W]
+        xc = abs(torch.cat([x1, x2], dim=1))  
 
         # ------ Diff 分支 ------
-        diff_feat = self.shared_conv3x3(xd)          # [B, 32, H, W]
-        # diff_feat = self.shared2_conv3x3(diff_feat)  # [B, 64, H, W]
+        diff_feat = self.shared_conv3x3(xd)          
+        # diff_feat = self.shared2_conv3x3(diff_feat)  
 
         # ------ Concat 分支 ------
-        concat_feat = self.concat_3x3(xc)            # [B, 64, H, W]
+        concat_feat = self.concat_3x3(xc)           
 
         # ------ 全局/局部特征 ------
-        # global_feat = self.vssm_diff1(diff_feat)          # [B, 64, H, W]
-        # local_feat  = self.deconv1(concat_feat)      # [B, 64, H, W]
-        # global_feat1 = self.vssm_diff2(concat_feat)          # [B, 64, H, W]
-        # local_feat1  = self.deconv2(diff_feat)      # [B, 64, H, W]
         global_feat = self.trans1(diff_feat)
         local_feat = self.deconv1(concat_feat)
-        #
+
         global_feat1 = self.trans2(concat_feat)
         local_feat1 = self.deconv2(diff_feat)
         # ------ 融合 ------
-        fused_feat1 = self.fusion(global_feat, local_feat1)  # [B, 64, H, W]
-        fused_feat2 = self.fusion(global_feat1,  local_feat)    # [B, 64, H, W]
-        fused_all = torch.cat([fused_feat1, fused_feat2], dim=1) # [B, 128, H, W]
+        fused_feat1 = self.fusion(global_feat, local_feat1)  
+        fused_feat2 = self.fusion(global_feat1,  local_feat)   
+        fused_all = torch.cat([fused_feat1, fused_feat2], dim=1) 
 
         # ------ 分类（样本级）------
         out = self.pool(fused_all).squeeze(-1).squeeze(-1) # [B, 128]
@@ -445,7 +319,6 @@ class Net(nn.Module):
         out = F.relu(self.fc2(out), inplace=True)
         logits = self.fc3(out)                         # [B, class_count]
 
-        # 训练建议直接返回 logits，用 CrossEntropyLoss
         return logits
 
 if __name__ == "__main__":
