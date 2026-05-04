@@ -20,7 +20,7 @@ import matplotlib.patches as mpatches
 import modelpa430
 from VMamba.classification.models.gldvm import VSSBlock
 
-import HSI_mamba
+import SSMIF
 import  AIWSEN
 import glafomer
 import gtmsiam
@@ -302,7 +302,7 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
     
     
     # ---------- 其他模型 ----------
-    # net = HSI_mamba().to(device)
+    # net = SSMIF().to(device)
     # optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5e-3)
 
     # net = AIWSEN.AIWSEN(in_chans=C).to(device)
