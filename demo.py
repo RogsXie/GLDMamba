@@ -9,7 +9,7 @@ from sklearn import metrics
 import time
 from sklearn import preprocessing
 import torch
-import modelmy429
+import GLDMamba
 import torch.nn as nn
 import warnings
 warnings.filterwarnings("ignore")
