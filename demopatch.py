@@ -17,14 +17,13 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-import modelpa430
 from VMamba.classification.models.gldvm import VSSBlock
 
 import SSMIF
 import  AIWSEN
-import glafomer
-import gtmsiam
-import sstvit
+import GLAFormer
+import GTMSiam
+import SSTFormer
 import CSANet
 # ---------------------------
 # 设备
@@ -302,14 +301,14 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
     
     
     # ---------- 其他模型 ----------
-    # net = SSMIF().to(device)
+    # net = SSMIF.SSMIF().to(device)
     # optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=5e-3)
 
     # net = AIWSEN.AIWSEN(in_chans=C).to(device)
     # optimizer = torch.optim.SGD(net.parameters(), lr=lr, weight_decay=5e-3)
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=35, gamma=0.9)
 
-    # net = glafomer.GLAFormer(img_c=C,
+    # net = GLAFormer.GLAFormer(img_c=C,
     #             embed_dim=256,
     #             depth=6,
     #             num_heads=8,
@@ -318,11 +317,11 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
     # optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     # scheduler = StepLR(optimizer, step_size=10, gamma=0.7)
 
-    # net = gtmsiam.GTMSiam(1, C, 30, 30, 128).to(device)
+    # net = GTMSiam.GTMSiam(1, C, 30, 30, 128).to(device)
     # optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=200, gamma=0.9)
 
-    # net = sstvit.SSTViT(
+    # net = SSTFormer.SSTViT(
     #         image_size = 5,
     #         near_band = 1,
     #         num_patches = C ,
