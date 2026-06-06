@@ -349,7 +349,7 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
 
 
     criterion = nn.CrossEntropyLoss()
-    net = modelpaatch.Net(C, class_count, H).to(device)
+    net = GLDMambaP.GLDMambaP(C, class_count, H).to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.9)
 
