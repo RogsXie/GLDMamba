@@ -2348,30 +2348,20 @@ class ConcatMambaFusionBlock(nn.Module):
         else:
             return self._forward(x_rgb, x_e)
 
-block = ConcatMambaFusionBlock(dim=32).cuda()
+# block = ConcatMambaFusionBlock(dim=32).cuda()
 
-# 输入 [B, H, W, C]  ← 注意是通道最后
-x_hsi   = torch.randn(64, 11, 11, 32).cuda()
-x_lidar = torch.randn(64, 11, 11, 32).cuda()
+# # 输入 [B, H, W, C]  ← 注意是通道最后
+# x_hsi   = torch.randn(64, 11, 11, 32).cuda()
+# x_lidar = torch.randn(64, 11, 11, 32).cuda()
 
-# 前向
-out = block(x_hsi, x_lidar)
+# # 前向
+# out = block(x_hsi, x_lidar)
 
-print(f"x_hsi  : {x_hsi.shape}")   # [64, 11, 11, 32]
-print(f"x_lidar: {x_lidar.shape}") # [64, 11, 11, 32]
-print(f"输出   : {out.shape}")      # [64, 11, 11, 32]
+# print(f"x_hsi  : {x_hsi.shape}")   # [64, 11, 11, 32]
+# print(f"x_lidar: {x_lidar.shape}") # [64, 11, 11, 32]
+# print(f"输出   : {out.shape}")      # [64, 11, 11, 32]
 
-# =====================================================
-if __name__ == '__main__':
-        device = torch.device("cuda:0")
-        hidden_dim = 3
-        network = VSSM(hidden_dim).to('cuda:0')
-        x = torch.randn(1, 64, 450, 320)
-        # b, c, h, w = x.shape
-        # x = x.view(b, 1, c, h, w)
-        input_image = x.to(device)
-        output = network(input_image)
-        print("Output shape:", output.shape)
+
 
 
 
