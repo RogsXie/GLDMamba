@@ -366,7 +366,7 @@ for (FLAG, curr_train_ratio) in [(0, 100)]:
         net_input_2 = to_tensor(np.array(data2, np.float32))
 
         # ── 构建模型 ───────────────────────────────────────────────────────
-        net = modelmy429.Net(height, width, bands, class_count).to(device)
+        net = GLDMamba.GLDMamba(height, width, bands, class_count).to(device)
         optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
         # optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=1e-4)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.9)
