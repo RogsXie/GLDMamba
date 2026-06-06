@@ -425,20 +425,20 @@ def run_one_seed(seed, run_idx, data1_std, data2_std, gt, H, W, C, class_count):
 def main():
     # -------- 读数据（只读一次） --------
 
-    # data1 = sio.loadmat(os.path.join(data_path, 'farm', 'farm06.mat'))['imgh']
-    # data2 = sio.loadmat(os.path.join(data_path, 'farm', 'farm07.mat'))['imghl']
-    # gt = sio.loadmat(os.path.join(data_path, 'farm', 'label.mat'))['label']
+    data1 = sio.loadmat(os.path.join(data_path, 'farm', 'farm06.mat'))['imgh']
+    data2 = sio.loadmat(os.path.join(data_path, 'farm', 'farm07.mat'))['imghl']
+    gt = sio.loadmat(os.path.join(data_path, 'farm', 'label.mat'))['label']
 
     # data1 = sio.loadmat(os.path.join(data_path, 'Hermiston','hermiston2004.mat'))['HypeRvieW']
     # data2 = sio.loadmat(os.path.join(data_path, 'Hermiston','hermiston2007.mat'))['HypeRvieW']
     # gt = sio.loadmat(os.path.join(data_path, 'Hermiston','label.mat'))['gt5clasesHermiston']
     # gt[gt > 1] = 1
 
-    data1 = sio.loadmat(os.path.join(data_path, 'River', 'river_after.mat'))['river_after']
-    data2 = sio.loadmat(os.path.join(data_path, 'River', 'river_before.mat'))['river_before']
-    gt    = sio.loadmat(os.path.join(data_path, 'River', 'groundtruth'))['lakelabel_v1']
-    gt = gt + 1
-    gt = np.where(gt == 1, 0, np.where(gt == 0, 1, gt))
+    # data1 = sio.loadmat(os.path.join(data_path, 'River', 'river_after.mat'))['river_after']
+    # data2 = sio.loadmat(os.path.join(data_path, 'River', 'river_before.mat'))['river_before']
+    # gt    = sio.loadmat(os.path.join(data_path, 'River', 'groundtruth'))['lakelabel_v1']
+    # gt = gt + 1
+    # gt = np.where(gt == 1, 0, np.where(gt == 0, 1, gt))
 
     gt = gt + 1   # {1=不变, 2=变化}
     print("gt 唯一值:", np.unique(gt))
