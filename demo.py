@@ -259,8 +259,8 @@ for (FLAG, curr_train_ratio) in [(0, 100)]:
     samples_type = ['ratio', 'same_num'][FLAG]
     val_ratio    = 0.01
     class_count  = 2
-    learning_rate = 0.0003
-    max_epoch     = 200
+    learning_rate = 0.0001
+    max_epoch     = 300
     dataset_name  = "riv"
     train_ratio   = 0.01 if samples_type == "ratio" else curr_train_ratio
     train_samples_per_class = curr_train_ratio
