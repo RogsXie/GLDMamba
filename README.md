@@ -23,7 +23,17 @@ If you encounter any problems while using this code, please feel free to contact
 ----------
 **Please kindly cite the papers if this code is useful and helpful for your research.**
 
+Zhenyang Xie, Li Lv, Hongmin Gao, Shufang Xu, Jeng-Shyang Pan, Wenping Chen, Longzhe Han. GLDMamba: Global–local differential mamba network for hyperspectral image change detection, IEEE Transactions on Geoscience and Remote Sensing (TGRS), 2026, vol. 64, Art. no. 5516616, DOI: 10.1109/TGRS.2026.3701799.
 
+    @article{11146867,
+      title={GLDMamba: Global–Local Differential Mamba  Network for Hyperspectral Image  Change Detection},
+      author={Xie, Zhenyang and Lv, Li and Gao, Hongmin and Xu, Shufang and Pan, Jeng-Shyang and Chen, Wenping and Han, Longzhe},
+      journal={IEEE Trans. Geosci. Remote Sens},
+      year={2026},
+      volume={64},
+      note = {Art. no. 5516616},
+      note = {DOI: 10.1109/TGRS.2026.3701799}
+    }
 
   ## Contact Information
   ----------
