@@ -32,31 +32,29 @@ class LDSM(nn.Module):
     def __init__(self, d):
         super().__init__()
 
-        self.p2 = nn.Conv2d(
-            d, d,
-            kernel_size=(1, 3),
-            padding=(0, 1),
-            bias=True
-        )
+        self.p1 = nn.Conv2d(d, d, 3, padding=1, bias=True)          # CDC
+        self.p2 = nn.Conv2d(d, d, kernel_size=(1, 3), padding=(0, 1), bias=True)  # HD
+        self.p3 = nn.Conv2d(d, d, kernel_size=(3, 1), padding=(1, 0), bias=True)  # VD
+        self.p4 = nn.Conv2d(d, d, 3, padding=1, bias=True)          # AD
+        self.p5 = nn.Conv2d(d, d, 3, padding=1, bias=True)          # SC
+        self.p6 = nn.Conv2d(d, d, 3, padding=1, bias=True)          # MDD
 
-        self.p3 = nn.Conv2d(
-            d, d,
-            kernel_size=(3, 1),
-            padding=(1, 0),
-            bias=True
-        )
+    def _g1(self):
+        """CDC: Center Difference Convolution"""
+        w = self.p1.weight
+        o, i, _, _ = w.shape
+        wf = w.view(o, i, 9)
 
-        self.p5 = nn.Conv2d(
-            d, d,
-            kernel_size=3,
-            padding=1,
-            bias=True
-        )
+        idx = torch.tensor([0, 1, 2, 3, 5, 6, 7, 8], device=w.device)
+        ns = wf.index_select(2, idx).sum(dim=2)
+
+        wc = wf.clone()
+        wc[..., 4] = wf[..., 4] - ns
+
+        return wc.view(o, i, 3, 3), self.p1.bias
 
     def _g2(self):
-        """
-        HD: Horizontal Difference
-        """
+        """HD: Horizontal Difference"""
         w = self.p2.weight
         o, i, _, _ = w.shape
         v = w.view(o, i, 3)
@@ -68,9 +66,7 @@ class LDSM(nn.Module):
         return w3, self.p2.bias
 
     def _g3(self):
-        """
-        VD: Vertical Difference
-        """
+        """VD: Vertical Difference"""
         w = self.p3.weight
         o, i, _, _ = w.shape
         v = w.view(o, i, 3)
@@ -81,19 +77,42 @@ class LDSM(nn.Module):
 
         return w3, self.p3.bias
 
+    def _g4(self):
+        """AD: Anti-diagonal Difference"""
+        w = self.p4.weight
+        o, i, _, _ = w.shape
+        wf = w.view(o, i, 9)
+
+        idx = torch.tensor([3, 0, 1, 6, 4, 2, 7, 8, 5], device=w.device)
+        wa = wf - wf.index_select(2, idx)
+
+        return wa.view(o, i, 3, 3), self.p4.bias
+
     def _g5(self):
-        """
-        SC: Standard 3x3 Convolution
-        """
+        """SC: Standard Convolution"""
         return self.p5.weight, self.p5.bias
 
+    def _g6(self):
+        """MDD: Main-diagonal Difference"""
+        w = self.p6.weight
+        o, i, _, _ = w.shape
+        wf = w.view(o, i, 9)
+
+        idx = torch.tensor([0, 3, 6, 1, 4, 7, 2, 5, 8], device=w.device)
+        wm = wf - wf.index_select(2, idx)
+
+        return wm.view(o, i, 3, 3), self.p6.bias
+
     def forward(self, x):
+        w1, b1 = self._g1()
         w2, b2 = self._g2()
         w3, b3 = self._g3()
+        w4, b4 = self._g4()
         w5, b5 = self._g5()
+        w6, b6 = self._g6()
 
-        w = torch.stack([w2, w3, w5], dim=0).sum(dim=0)
-        b = _bz(b2, b3, b5)
+        w = torch.stack([w1, w2, w3, w4, w5, w6], dim=0).sum(dim=0)
+        b = _bz(b1, b2, b3, b4, b5, b6)
 
         return F.conv2d(x, w, b, stride=1, padding=1, groups=1)
 
